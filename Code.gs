@@ -125,8 +125,10 @@ function buildScoopSheet_(ss, sheet, scoop, sheetIdx) {
   var echeances = scoop.echeances || [];
   var baremeList = (scoop.bareme && scoop.bareme.length)
     ? scoop.bareme
-    : [{ mois:5, montant:5900 }, { mois:6, montant:7080 },
-       { mois:7, montant:8260 }, { mois:8, montant:8440 }];
+    : [{ mois:5, montant:5900 },  { mois:6, montant:7080 },
+       { mois:7, montant:8260 },  { mois:8, montant:9440 },
+       { mois:9, montant:10620 }, { mois:10, montant:11800 },
+       { mois:11, montant:12980 },{ mois:12, montant:14160 }];  // = defaultBareme() côté client
 
   var capitalAccorde = toNumber_(scoop.capitalAccorde, 0);
   var tauxDepot      = toRate_(scoop.tauxDepot, 0.1);
