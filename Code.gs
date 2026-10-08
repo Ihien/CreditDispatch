@@ -81,6 +81,7 @@ function testGeneration() {
   });
   Logger.log('Version : ' + res.codeVersion);
   Logger.log('Classeur : ' + res.sheetUrl);
+  Logger.log(res.base64 ? 'Export .xlsx : OK' : 'Export .xlsx : ÉCHEC — ' + res.exportError);
 }
 
 function generateWorkbookImpl_(payload) {
@@ -118,17 +119,25 @@ function generateWorkbookImpl_(payload) {
   SpreadsheetApp.flush();
 
   var fileId   = ss.getId();
-  var xlsxBlob = exportAsXlsx_(fileId);
-  var base64   = Utilities.base64Encode(xlsxBlob.getBytes());
   var filename = ss.getName() + '.xlsx';
+  var base64 = null, exportError = null;
+  try {
+    base64 = Utilities.base64Encode(exportAsXlsx_(fileId).getBytes());
+  } catch (e) {
+    // L'export peut être bloqué (autorisation script.external_request absente
+    // ou refusée par l'administrateur Workspace). On ne perd pas le travail :
+    // le classeur Google Sheets est conservé et son lien est renvoyé.
+    exportError = (e && e.message) ? e.message : String(e);
+  }
 
-  var keep = payload.keepGoogleSheet !== false;
+  var keep = payload.keepGoogleSheet !== false || base64 === null;
   if (!keep && !reuseExisting) DriveApp.getFileById(fileId).setTrashed(true);
 
   return {
     base64: base64,
     filename: filename,
     sheetUrl: (keep || reuseExisting) ? ss.getUrl() : null,
+    exportError: exportError,
     summary: summary
   };
 }
