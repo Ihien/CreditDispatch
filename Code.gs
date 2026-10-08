@@ -30,6 +30,7 @@ var HEADER_FONT  = '#FFFFFF';
 var SECTION_FILL = '#E7F2F1';
 var WARN_FILL    = '#F4C7C3';
 var NUM_FMT = '#,##0';
+var CODE_VERSION = 'v2-sans-plages-nommees-2026-10-08';
 var PCT_FMT = '0%';
 
 /* ───── Entrée web app ───── */
@@ -49,6 +50,40 @@ function include(filename) {
 /* ───── Point d'entrée appelé depuis le client ───── */
 
 function generateWorkbook(payload) {
+  try {
+    var result = generateWorkbookImpl_(payload);
+    result.codeVersion = CODE_VERSION;
+    return result;
+  } catch (e) {
+    // Le préfixe de version prouve quel code serveur a produit l'erreur.
+    throw new Error('[' + CODE_VERSION + '] ' + (e && e.message ? e.message : e));
+  }
+}
+
+/** Renvoie la version du code serveur réellement exécuté. */
+function getCodeVersion() {
+  return CODE_VERSION;
+}
+
+/**
+ * Test à lancer depuis l'éditeur (menu « Exécuter » → testGeneration).
+ * Crée un classeur de test et affiche son URL dans le journal d'exécution.
+ */
+function testGeneration() {
+  var res = generateWorkbook({
+    keepGoogleSheet: true,
+    scoops: [{
+      nom: 'SCOOPS FONG NINTA', localite: 'Test',
+      capitalAccorde: 1000000, tauxDepot: 0.10, dureeMois: 6, moisAgio: 6,
+      membres: [{ nom: 'Membre A', besoin: 600000 }, { nom: 'Membre B', besoin: 600000 }],
+      echeances: [{ date: '2026-01-15', montant: 600000 }, { date: '2026-02-15', montant: 600000 }]
+    }]
+  });
+  Logger.log('Version : ' + res.codeVersion);
+  Logger.log('Classeur : ' + res.sheetUrl);
+}
+
+function generateWorkbookImpl_(payload) {
   if (!payload || !payload.scoops || payload.scoops.length === 0) {
     throw new Error('Aucun SCOOP à traiter.');
   }
