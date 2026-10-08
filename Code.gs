@@ -19,8 +19,9 @@
  * de l'API setNamedRange dans Apps Script.
  *
  * NOTE EXPORT : DriveApp.getAs() ne sait pas convertir un Google Sheet en
- * .xlsx. L'export passe par l'URL d'export de Google Sheets (UrlFetchApp),
- * après SpreadsheetApp.flush() pour que toutes les écritures soient incluses.
+ * .xlsx, et UrlFetchApp exige l'autorisation script.external_request (souvent
+ * bloquée par l'administrateur Workspace). Le serveur renvoie donc un lien
+ * d'export que le navigateur de l'agent télécharge directement.
  */
 
 var INPUT_FONT_COLOR  = '#1155CC';
@@ -30,7 +31,7 @@ var HEADER_FONT  = '#FFFFFF';
 var SECTION_FILL = '#E7F2F1';
 var WARN_FILL    = '#F4C7C3';
 var NUM_FMT = '#,##0';
-var CODE_VERSION = 'v2-sans-plages-nommees-2026-10-08';
+var CODE_VERSION = 'v3-sans-urlfetch-2026-10-08';
 var PCT_FMT = '0%';
 
 /* ───── Entrée web app ───── */
@@ -81,7 +82,7 @@ function testGeneration() {
   });
   Logger.log('Version : ' + res.codeVersion);
   Logger.log('Classeur : ' + res.sheetUrl);
-  Logger.log(res.base64 ? 'Export .xlsx : OK' : 'Export .xlsx : ÉCHEC — ' + res.exportError);
+  Logger.log('Lien de téléchargement .xlsx : ' + res.downloadUrl);
 }
 
 function generateWorkbookImpl_(payload) {
@@ -120,40 +121,34 @@ function generateWorkbookImpl_(payload) {
 
   var fileId   = ss.getId();
   var filename = ss.getName() + '.xlsx';
-  var base64 = null, exportError = null;
-  try {
-    base64 = Utilities.base64Encode(exportAsXlsx_(fileId).getBytes());
-  } catch (e) {
-    // L'export peut être bloqué (autorisation script.external_request absente
-    // ou refusée par l'administrateur Workspace). On ne perd pas le travail :
-    // le classeur Google Sheets est conservé et son lien est renvoyé.
-    exportError = (e && e.message) ? e.message : String(e);
-  }
 
-  var keep = payload.keepGoogleSheet !== false || base64 === null;
-  if (!keep && !reuseExisting) DriveApp.getFileById(fileId).setTrashed(true);
+  // Donne accès au classeur à l'utilisateur de l'application (si ce n'est pas
+  // le propriétaire), sinon il ne pourra ni l'ouvrir ni le télécharger.
+  shareWithRequester_(fileId);
 
   return {
-    base64: base64,
     filename: filename,
-    sheetUrl: (keep || reuseExisting) ? ss.getUrl() : null,
-    exportError: exportError,
+    sheetUrl: ss.getUrl(),
+    // Téléchargement .xlsx fait par le NAVIGATEUR (session Google de l'agent) :
+    // aucun appel externe côté serveur, donc pas d'autorisation
+    // script.external_request nécessaire.
+    downloadUrl: 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx',
     summary: summary
   };
 }
 
-/* ───── Export .xlsx ───── */
+/* ───── Partage ───── */
 
-function exportAsXlsx_(fileId) {
-  var url = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=xlsx';
-  var resp = UrlFetchApp.fetch(url, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() !== 200) {
-    throw new Error('Échec de l\'export .xlsx (HTTP ' + resp.getResponseCode() + ').');
+function shareWithRequester_(fileId) {
+  try {
+    var email = Session.getActiveUser().getEmail();
+    if (!email) return;
+    var file = DriveApp.getFileById(fileId);
+    if (file.getOwner() && file.getOwner().getEmail() === email) return;
+    file.addEditor(email);
+  } catch (e) {
+    Logger.log('Partage impossible : ' + e);
   }
-  return resp.getBlob();
 }
 
 /* ───── Construction d'une feuille SCOOP ───── */
